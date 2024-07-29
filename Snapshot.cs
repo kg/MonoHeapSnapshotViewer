@@ -28,6 +28,7 @@ namespace MonoHeapSnapshotViewer {
         };
         public SnapshotClass[] Classes;
         public SnapshotObject[] Objects;
+        public SnapshotRoot[] Roots;
         public Task Initializing;
 
         public Snapshot (string path) {
@@ -48,9 +49,10 @@ namespace MonoHeapSnapshotViewer {
             LoadCounters(counterChunk);
             Classes = new SnapshotClass[(int)Counters["snapshot/num-classes"]];
             Objects = new SnapshotObject[(int)Counters["snapshot/num-objects"]];
+            Roots = new SnapshotRoot[(int)Counters["snapshot/num-roots"]];
             var refAddresses = new ArraySegment<UInt32>(new UInt32[(int)Counters["snapshot/num-refs"]]);
 
-            int classOffset = 0, objectOffset = 0;
+            int classOffset = 0, objectOffset = 0, rootOffset = 0;
 
             // First decoding pass
             while (i < (View.Capacity - 8)) {
@@ -72,6 +74,9 @@ namespace MonoHeapSnapshotViewer {
                 }
             }
 
+            Array.Sort(Classes, 0, classOffset, SnapshotClass.AddressComparer.Instance);
+            Array.Sort(Objects, 0, objectOffset, SnapshotObject.AddressComparer.Instance);
+
             // Ref scanning pass
             i = 0;
             while (i < (View.Capacity - 8)) {
@@ -81,6 +86,9 @@ namespace MonoHeapSnapshotViewer {
                     case "REFS":
                         // Determine how many refs total each object has so we can reserve enough space to store them
                         DecodeRefsPass1(chunk);
+                        break;
+                    case "ROOT":
+                        DecodeRootsPass1(chunk, ref rootOffset);
                         break;
                     default:
                         Debug.WriteLine($"{chunkId} {chunk.Data.Length}b");
@@ -107,20 +115,44 @@ namespace MonoHeapSnapshotViewer {
             BuildSummaryData();
         }
 
+        private void DecodeRootsPass1 (RiffChunk chunk, ref int rootOffset) {
+            var data = chunk.Data;
+            while (data.Length > 0) {
+                Assert(ReadLEBUInt(ref data, out var kind));
+                Assert(ReadLEBUInt(ref data, out var rootCount));
+                for (uint i = 0; i < rootCount; i++) {
+                    ref var root = ref Roots[rootOffset++];
+                    root = new SnapshotRoot();
+                    root.Address = ReadValue<UInt32>(ref data);
+                    root.Object = ReadValue<UInt32>(ref data);
+                    ref var obj = ref Object(root.Object);
+                    obj.DirectRootCount++;
+                }
+            }
+        }
+
         private void BuildSummaryData () {
+            for (int i = 0; i < Objects.Length; i++) {
+                ref var obj = ref Objects[i];
+                ref var klass = ref Class(obj.Klass);
+                klass.Count += 1;
+                klass.ShallowSizeSum += obj.ShallowSize;
+            }
+
             for (int i = 0; i < Objects.Length; i++) {
                 ref var obj = ref Objects[i];
                 ref var klass = ref Class(obj.Klass);
                 UpdateSummaryDataForObject(ref klass, ref obj, 0);
             }
+
+            for (int i = 0; i < Classes.Length; i++) {
+                ref var klass = ref Classes[i];
+                klass.Depth2HashSet = null;
+                klass.SubtreeHashSet = null;
+            }
         }
 
         private void UpdateSummaryDataForObject (ref SnapshotClass klass, ref SnapshotObject obj, int depth) {
-            if (depth == 0) {
-                klass.Count += 1;
-                klass.ShallowSizeSum += obj.ShallowSize;
-            }
-
             UpdateSummaryDataForObjectRefs(ref klass, ref obj, 0);
         }
 
@@ -141,10 +173,17 @@ namespace MonoHeapSnapshotViewer {
                 klass.SubtreeSizeSum += obj.ShallowSize;
             }
 
+            if (depth == 0)
+                obj.Depth2Size = obj.ShallowSize;
+
             if (obj.RefCount < 1)
                 return;
+
             foreach (var r in obj.Refs) {
                 ref var refTarget = ref Object(r);
+
+                if (depth == 0)
+                    obj.Depth2Size += refTarget.ShallowSize;
 
                 if (!klass.SubtreeHashSet.Contains(refTarget.Object))
                     UpdateSummaryDataForObjectRefs(ref klass, ref refTarget, depth + 1);
@@ -167,6 +206,7 @@ namespace MonoHeapSnapshotViewer {
                 klass = new SnapshotClass();
                 klass.Klass = ReadValue<UInt32>(ref data);
                 klass.ElementKlass = ReadValue<UInt32>(ref data);
+                klass.NestingKlass = ReadValue<UInt32>(ref data);
                 klass.Assembly = ReadValue<UInt32>(ref data);
                 Assert(ReadLEBUInt(ref data, out var rank));
                 klass.Rank = (int)rank;
@@ -184,9 +224,6 @@ namespace MonoHeapSnapshotViewer {
                     gps[i] = ReadValue<UInt32>(ref data);
                 klass.GenericParameters = gps;
             }
-
-            // HACK :(
-            Array.Sort(Classes, 0, classOffset, SnapshotClass.AddressComparer.Instance);
         }
 
         private void DecodeObjectHeaders (RiffChunk chunk, ref int objectOffset) {
@@ -199,9 +236,6 @@ namespace MonoHeapSnapshotViewer {
                 Assert(ReadLEBUInt(ref data, out var shallowSize));
                 header.ShallowSize = (uint)shallowSize;
             }
-
-            // HACK :(
-            Array.Sort(Objects, 0, objectOffset, SnapshotObject.AddressComparer.Instance);
         }
 
         private void DecodeRefsPass1 (RiffChunk chunk) {
@@ -249,7 +283,8 @@ namespace MonoHeapSnapshotViewer {
                 Klass = klass,
             };
             var index = Array.BinarySearch(Classes, needle, SnapshotClass.AddressComparer.Instance);
-            Assert(index >= 0);
+            if (index < 0)
+                throw new Exception($"Class not found: {klass}");
             return ref Classes[index];
         }
 
@@ -258,7 +293,8 @@ namespace MonoHeapSnapshotViewer {
                 Object = obj,
             };
             var index = Array.BinarySearch(Objects, needle, SnapshotObject.AddressComparer.Instance);
-            Assert(index >= 0);
+            if (index < 0)
+                throw new Exception($"Object not found: {obj}");
             return ref Objects[index];
         }
 
@@ -322,17 +358,18 @@ namespace MonoHeapSnapshotViewer {
                 x.Klass.CompareTo(y.Klass);
         }
 
-        public UInt32 Klass, ElementKlass, Assembly;
+        public UInt32 Klass, ElementKlass, NestingKlass, Assembly;
         public int Rank;
         public StringTableKey Kind, Namespace, Name;
         public ArraySegment<UInt32> GenericParameters;
 
-        public HashSet<UInt32> Depth2HashSet, SubtreeHashSet;
+        public HashSet<UInt32>? Depth2HashSet, SubtreeHashSet;
 
         public uint Count, ShallowSizeSum, Depth2SizeSum, SubtreeSizeSum;
 
         private string? _FullName;
 
+        // FIXME: Use a stringbuilder
         public string GetFullName (Snapshot snapshot) {
             if (_FullName != null)
                 return _FullName;
@@ -342,9 +379,15 @@ namespace MonoHeapSnapshotViewer {
             else
                 _FullName = Name.Get(snapshot);
 
+            if (NestingKlass > 0)
+                _FullName = $"{snapshot.Class(NestingKlass).GetFullName(snapshot)}.{_FullName}";
+
             // FIXME: Optimize this
             if (GenericParameters.Count > 0)
                 _FullName += $"<{string.Join(", ", from gp in GenericParameters select snapshot.Class(gp).GetFullName(snapshot))}>";
+
+            if (Rank > 0)
+                _FullName += "[]";
 
             return _FullName;
         }
@@ -359,7 +402,43 @@ namespace MonoHeapSnapshotViewer {
         }
 
         public UInt32 Object, Klass;
-        public uint ShallowSize, RefCount, Depth2Size, SubtreeSize;
+        public uint ShallowSize, RefCount, Depth2Size, DirectRootCount;
         public ArraySegment<UInt32> Refs;
+
+        private uint _SubtreeSize;
+
+        public uint GetSubtreeSize (Snapshot snapshot) {
+            if (_SubtreeSize > 0)
+                return _SubtreeSize;
+
+            if (Refs.Count <= 0)
+                return ShallowSize;
+
+            var set = new HashSet<UInt32> { Object };
+            var result = ShallowSize;
+            if (RefCount > 0)
+                AccumulateRefs(snapshot, set, Refs, ref result);
+            _SubtreeSize = result;
+            return result;
+        }
+
+        private void AccumulateRefs (Snapshot snapshot, HashSet<UInt32> set, ArraySegment<uint> refs, ref uint result) {
+            foreach (var r in refs) {
+                if (set.Contains(r))
+                    continue;
+
+                ref var refTarget = ref snapshot.Object(r);
+                set.Add(r);
+                result += refTarget.ShallowSize;
+
+                if (refTarget.RefCount > 0)
+                    AccumulateRefs(snapshot, set, refTarget.Refs, ref result);
+            }
+        }
+    }
+
+    public struct SnapshotRoot {
+        public StringTableKey Kind;
+        public UInt32 Address, Object;
     }
 }

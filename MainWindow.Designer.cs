@@ -23,19 +23,80 @@
         ///  the contents of this method with the code editor.
         /// </summary>
         private void InitializeComponent () {
+            MenuBar = new MenuStrip();
+            fileToolStripMenuItem = new ToolStripMenuItem();
+            openToolStripMenuItem = new ToolStripMenuItem();
+            OpenDialog = new OpenFileDialog();
+            splitContainer1 = new SplitContainer();
             TypesGrid = new DataGridView();
             TypeName = new DataGridViewTextBoxColumn();
             ObjectCount = new DataGridViewTextBoxColumn();
             ShallowSize = new DataGridViewTextBoxColumn();
             Depth2Size = new DataGridViewTextBoxColumn();
             SubtreeSize = new DataGridViewTextBoxColumn();
-            MenuBar = new MenuStrip();
-            fileToolStripMenuItem = new ToolStripMenuItem();
-            openToolStripMenuItem = new ToolStripMenuItem();
-            OpenDialog = new OpenFileDialog();
-            ((System.ComponentModel.ISupportInitialize)TypesGrid).BeginInit();
+            InstancesGrid = new DataGridView();
+            Root = new DataGridViewCheckBoxColumn();
+            dataGridViewTextBoxColumn1 = new DataGridViewTextBoxColumn();
+            dataGridViewTextBoxColumn3 = new DataGridViewTextBoxColumn();
+            dataGridViewTextBoxColumn4 = new DataGridViewTextBoxColumn();
+            dataGridViewTextBoxColumn5 = new DataGridViewTextBoxColumn();
             MenuBar.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)splitContainer1).BeginInit();
+            splitContainer1.Panel1.SuspendLayout();
+            splitContainer1.Panel2.SuspendLayout();
+            splitContainer1.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)TypesGrid).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)InstancesGrid).BeginInit();
             SuspendLayout();
+            // 
+            // MenuBar
+            // 
+            MenuBar.ImageScalingSize = new Size(24, 24);
+            MenuBar.Items.AddRange(new ToolStripItem[] { fileToolStripMenuItem });
+            MenuBar.Location = new Point(0, 0);
+            MenuBar.Name = "MenuBar";
+            MenuBar.Size = new Size(1258, 33);
+            MenuBar.TabIndex = 1;
+            MenuBar.Text = "menuStrip1";
+            // 
+            // fileToolStripMenuItem
+            // 
+            fileToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { openToolStripMenuItem });
+            fileToolStripMenuItem.Name = "fileToolStripMenuItem";
+            fileToolStripMenuItem.Size = new Size(54, 29);
+            fileToolStripMenuItem.Text = "&File";
+            // 
+            // openToolStripMenuItem
+            // 
+            openToolStripMenuItem.Name = "openToolStripMenuItem";
+            openToolStripMenuItem.Size = new Size(170, 34);
+            openToolStripMenuItem.Text = "&Open...";
+            openToolStripMenuItem.Click += openToolStripMenuItem_Click;
+            // 
+            // OpenDialog
+            // 
+            OpenDialog.DefaultExt = "mono-heap";
+            OpenDialog.Filter = "Mono Heap Snapshots|*.mono-heap";
+            OpenDialog.ShowHiddenFiles = true;
+            OpenDialog.Title = "Open Snapshot";
+            // 
+            // splitContainer1
+            // 
+            splitContainer1.Dock = DockStyle.Fill;
+            splitContainer1.Location = new Point(0, 33);
+            splitContainer1.Name = "splitContainer1";
+            splitContainer1.Orientation = Orientation.Horizontal;
+            // 
+            // splitContainer1.Panel1
+            // 
+            splitContainer1.Panel1.Controls.Add(TypesGrid);
+            // 
+            // splitContainer1.Panel2
+            // 
+            splitContainer1.Panel2.Controls.Add(InstancesGrid);
+            splitContainer1.Size = new Size(1258, 911);
+            splitContainer1.SplitterDistance = 604;
+            splitContainer1.TabIndex = 2;
             // 
             // TypesGrid
             // 
@@ -43,20 +104,22 @@
             TypesGrid.AllowUserToDeleteRows = false;
             TypesGrid.AllowUserToOrderColumns = true;
             TypesGrid.AllowUserToResizeRows = false;
-            TypesGrid.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             TypesGrid.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.DisplayedCells;
             TypesGrid.BorderStyle = BorderStyle.None;
             TypesGrid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
             TypesGrid.Columns.AddRange(new DataGridViewColumn[] { TypeName, ObjectCount, ShallowSize, Depth2Size, SubtreeSize });
-            TypesGrid.Location = new Point(0, 36);
+            TypesGrid.Dock = DockStyle.Fill;
+            TypesGrid.Location = new Point(0, 0);
             TypesGrid.Name = "TypesGrid";
             TypesGrid.RowHeadersVisible = false;
             TypesGrid.RowHeadersWidth = 62;
             TypesGrid.SelectionMode = DataGridViewSelectionMode.CellSelect;
-            TypesGrid.Size = new Size(1258, 628);
-            TypesGrid.TabIndex = 0;
+            TypesGrid.Size = new Size(1258, 604);
+            TypesGrid.TabIndex = 1;
             TypesGrid.VirtualMode = true;
             TypesGrid.CellValueNeeded += TypesGrid_CellValueNeeded;
+            TypesGrid.ColumnHeaderMouseClick += TypesGrid_ColumnHeaderMouseClick;
+            TypesGrid.SelectionChanged += TypesGrid_SelectionChanged;
             // 
             // TypeName
             // 
@@ -97,65 +160,106 @@
             SubtreeSize.Name = "SubtreeSize";
             SubtreeSize.Width = 145;
             // 
-            // MenuBar
+            // InstancesGrid
             // 
-            MenuBar.ImageScalingSize = new Size(24, 24);
-            MenuBar.Items.AddRange(new ToolStripItem[] { fileToolStripMenuItem });
-            MenuBar.Location = new Point(0, 0);
-            MenuBar.Name = "MenuBar";
-            MenuBar.Size = new Size(1258, 33);
-            MenuBar.TabIndex = 1;
-            MenuBar.Text = "menuStrip1";
+            InstancesGrid.AllowUserToAddRows = false;
+            InstancesGrid.AllowUserToDeleteRows = false;
+            InstancesGrid.AllowUserToOrderColumns = true;
+            InstancesGrid.AllowUserToResizeRows = false;
+            InstancesGrid.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.DisplayedCells;
+            InstancesGrid.BorderStyle = BorderStyle.None;
+            InstancesGrid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            InstancesGrid.Columns.AddRange(new DataGridViewColumn[] { Root, dataGridViewTextBoxColumn1, dataGridViewTextBoxColumn3, dataGridViewTextBoxColumn4, dataGridViewTextBoxColumn5 });
+            InstancesGrid.Dock = DockStyle.Fill;
+            InstancesGrid.Location = new Point(0, 0);
+            InstancesGrid.Name = "InstancesGrid";
+            InstancesGrid.RowHeadersVisible = false;
+            InstancesGrid.RowHeadersWidth = 62;
+            InstancesGrid.SelectionMode = DataGridViewSelectionMode.CellSelect;
+            InstancesGrid.Size = new Size(1258, 303);
+            InstancesGrid.TabIndex = 2;
+            InstancesGrid.VirtualMode = true;
+            InstancesGrid.CellValueNeeded += InstancesGrid_CellValueNeeded;
             // 
-            // fileToolStripMenuItem
+            // Root
             // 
-            fileToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { openToolStripMenuItem });
-            fileToolStripMenuItem.Name = "fileToolStripMenuItem";
-            fileToolStripMenuItem.Size = new Size(54, 29);
-            fileToolStripMenuItem.Text = "&File";
+            Root.AutoSizeMode = DataGridViewAutoSizeColumnMode.DisplayedCells;
+            Root.HeaderText = "Root";
+            Root.MinimumWidth = 8;
+            Root.Name = "Root";
+            Root.ReadOnly = true;
+            Root.Width = 56;
             // 
-            // openToolStripMenuItem
+            // dataGridViewTextBoxColumn1
             // 
-            openToolStripMenuItem.Name = "openToolStripMenuItem";
-            openToolStripMenuItem.Size = new Size(170, 34);
-            openToolStripMenuItem.Text = "&Open...";
-            openToolStripMenuItem.Click += openToolStripMenuItem_Click;
+            dataGridViewTextBoxColumn1.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+            dataGridViewTextBoxColumn1.HeaderText = "Address";
+            dataGridViewTextBoxColumn1.MinimumWidth = 150;
+            dataGridViewTextBoxColumn1.Name = "dataGridViewTextBoxColumn1";
             // 
-            // OpenDialog
+            // dataGridViewTextBoxColumn3
             // 
-            OpenDialog.DefaultExt = "mono-heap";
-            OpenDialog.Filter = "Mono Heap Snapshots|*.mono-heap";
-            OpenDialog.ShowHiddenFiles = true;
-            OpenDialog.Title = "Open Snapshot";
+            dataGridViewTextBoxColumn3.AutoSizeMode = DataGridViewAutoSizeColumnMode.DisplayedCells;
+            dataGridViewTextBoxColumn3.HeaderText = "Shallow Size";
+            dataGridViewTextBoxColumn3.MinimumWidth = 8;
+            dataGridViewTextBoxColumn3.Name = "dataGridViewTextBoxColumn3";
+            dataGridViewTextBoxColumn3.Width = 145;
+            // 
+            // dataGridViewTextBoxColumn4
+            // 
+            dataGridViewTextBoxColumn4.AutoSizeMode = DataGridViewAutoSizeColumnMode.DisplayedCells;
+            dataGridViewTextBoxColumn4.HeaderText = "Depth 2 Size";
+            dataGridViewTextBoxColumn4.MinimumWidth = 8;
+            dataGridViewTextBoxColumn4.Name = "dataGridViewTextBoxColumn4";
+            dataGridViewTextBoxColumn4.Width = 148;
+            // 
+            // dataGridViewTextBoxColumn5
+            // 
+            dataGridViewTextBoxColumn5.AutoSizeMode = DataGridViewAutoSizeColumnMode.DisplayedCells;
+            dataGridViewTextBoxColumn5.HeaderText = "Subtree Size";
+            dataGridViewTextBoxColumn5.MinimumWidth = 8;
+            dataGridViewTextBoxColumn5.Name = "dataGridViewTextBoxColumn5";
+            dataGridViewTextBoxColumn5.Width = 145;
             // 
             // MainWindow
             // 
             AutoScaleDimensions = new SizeF(10F, 25F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(1258, 664);
-            Controls.Add(TypesGrid);
+            ClientSize = new Size(1258, 944);
+            Controls.Add(splitContainer1);
             Controls.Add(MenuBar);
             MainMenuStrip = MenuBar;
             Name = "MainWindow";
             Text = "Heap Snapshot Viewer";
-            ((System.ComponentModel.ISupportInitialize)TypesGrid).EndInit();
             MenuBar.ResumeLayout(false);
             MenuBar.PerformLayout();
+            splitContainer1.Panel1.ResumeLayout(false);
+            splitContainer1.Panel2.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)splitContainer1).EndInit();
+            splitContainer1.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)TypesGrid).EndInit();
+            ((System.ComponentModel.ISupportInitialize)InstancesGrid).EndInit();
             ResumeLayout(false);
             PerformLayout();
         }
 
         #endregion
-
+        private MenuStrip MenuBar;
+        private ToolStripMenuItem fileToolStripMenuItem;
+        private ToolStripMenuItem openToolStripMenuItem;
+        private OpenFileDialog OpenDialog;
+        private SplitContainer splitContainer1;
         private DataGridView TypesGrid;
         private DataGridViewTextBoxColumn TypeName;
         private DataGridViewTextBoxColumn ObjectCount;
         private DataGridViewTextBoxColumn ShallowSize;
         private DataGridViewTextBoxColumn Depth2Size;
         private DataGridViewTextBoxColumn SubtreeSize;
-        private MenuStrip MenuBar;
-        private ToolStripMenuItem fileToolStripMenuItem;
-        private ToolStripMenuItem openToolStripMenuItem;
-        private OpenFileDialog OpenDialog;
+        private DataGridView InstancesGrid;
+        private DataGridViewCheckBoxColumn Root;
+        private DataGridViewTextBoxColumn dataGridViewTextBoxColumn1;
+        private DataGridViewTextBoxColumn dataGridViewTextBoxColumn3;
+        private DataGridViewTextBoxColumn dataGridViewTextBoxColumn4;
+        private DataGridViewTextBoxColumn dataGridViewTextBoxColumn5;
     }
 }
