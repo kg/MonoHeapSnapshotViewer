@@ -33,8 +33,6 @@ namespace MonoHeapSnapshotViewer {
                 return;
             }
             RefreshTypes();
-            TypesGrid.RowCount = TypeIndices.Count;
-            TypesGrid.Enabled = true;
             RefreshInstances();
         }
 
@@ -52,19 +50,53 @@ namespace MonoHeapSnapshotViewer {
                 case 3:
                     return cl.Depth2SizeSum.CompareTo(cr.Depth2SizeSum) * TypeSortDirection;
                 case 4:
-                    return cl.SubtreeSizeSum.CompareTo(cr.SubtreeSizeSum) * TypeSortDirection;
-                default: 
+                    return cl.ReachableSizeSum.CompareTo(cr.ReachableSizeSum) * TypeSortDirection;
+                default:
                     throw new NotImplementedException();
             }
         }
 
         private void RefreshTypes () {
+            string? filter = TypeFilter.Text.Trim();
+            if (filter.Length == 0)
+                filter = null;
+
             TypeIndices.Clear();
-            for (int i = 0; i < Snapshot.Classes.Length; i++)
-                if (Snapshot.Classes[i].Count > 0)
-                    TypeIndices.Add(i);
+            for (int i = 0; i < Snapshot.Classes.Length; i++) {
+                if (Snapshot.Classes[i].Count == 0)
+                    continue;
+
+                ref var klass = ref Snapshot.Classes[i];
+
+                if ((filter != null) && !klass.GetFullName(Snapshot).Contains(filter, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                TypeIndices.Add(i);
+            }
 
             TypeIndices.Sort(CompareTypes);
+            TypesGrid.RowCount = TypeIndices.Count;
+            TypesGrid.Enabled = true;
+        }
+
+        private int CompareInstances (int lhs, int rhs) {
+            ref var cl = ref Snapshot.Objects[lhs];
+            ref var cr = ref Snapshot.Objects[rhs];
+
+            switch (InstanceSortColumn) {
+                case 0:
+                    return cl.DirectRootCount.CompareTo(cr.DirectRootCount) * InstanceSortDirection;
+                case 1:
+                    return cl.Object.CompareTo(cr.Object) * InstanceSortDirection;
+                case 2:
+                    return cl.ShallowSize.CompareTo(cr.ShallowSize) * InstanceSortDirection;
+                case 3:
+                    return cl.Depth2Size.CompareTo(cr.Depth2Size) * InstanceSortDirection;
+                case 4:
+                    return cl.GetReachableSize(Snapshot).CompareTo(cr.GetReachableSize(Snapshot)) * InstanceSortDirection;
+                default:
+                    throw new NotImplementedException();
+            }
         }
 
         private void RefreshInstances () {
@@ -83,6 +115,8 @@ namespace MonoHeapSnapshotViewer {
                 InstanceIndices.Add(i);
             }
 
+            InstanceIndices.Sort(CompareInstances);
+
             InstancesGrid.RowCount = InstanceIndices.Count;
             InstancesGrid.Enabled = true;
         }
@@ -99,19 +133,21 @@ namespace MonoHeapSnapshotViewer {
                     e.Value = klass.GetFullName(Snapshot);
                     break;
                 case 1:
-                    e.Value = klass.Count;
+                    e.Value = klass.Count.ToString();
                     break;
                 case 2:
-                    e.Value = klass.ShallowSizeSum;
+                    e.Value = klass.ShallowSizeSum.ToString();
                     break;
                 case 3:
-                    e.Value = klass.Depth2SizeSum;
+                    e.Value = klass.Depth2SizeSum.ToString();
                     break;
                 case 4:
-                    e.Value = klass.SubtreeSizeSum;
+                    e.Value = klass.ReachableSizeSum.ToString();
                     break;
             }
         }
+
+        private static readonly object _False = false, _True = true;
 
         private void InstancesGrid_CellValueNeeded (object sender, DataGridViewCellValueEventArgs e) {
             if (Snapshot == null)
@@ -122,19 +158,19 @@ namespace MonoHeapSnapshotViewer {
 
             switch (e.ColumnIndex) {
                 case 0:
-                    e.Value = obj.DirectRootCount > 0;
+                    e.Value = obj.DirectRootCount > 0 ? _True : _False;
                     break;
                 case 1:
-                    e.Value = obj.Object;
+                    e.Value = obj.Object.ToString("X8");
                     break;
                 case 2:
-                    e.Value = obj.ShallowSize;
+                    e.Value = obj.ShallowSize.ToString();
                     break;
                 case 3:
-                    e.Value = obj.Depth2Size;
+                    e.Value = obj.Depth2Size.ToString();
                     break;
                 case 4:
-                    e.Value = obj.GetSubtreeSize(Snapshot);
+                    e.Value = obj.GetReachableSize(Snapshot);
                     break;
             }
         }
@@ -152,7 +188,26 @@ namespace MonoHeapSnapshotViewer {
                 TypeSortColumn = e.ColumnIndex;
             TypesGrid.Columns[TypeSortColumn].HeaderCell.SortGlyphDirection = TypeSortDirection > 0 ? SortOrder.Ascending : SortOrder.Descending;
             RefreshTypes();
-            TypesGrid.RowCount = TypeIndices.Count;
+        }
+
+        private void InstancesGrid_ColumnHeaderMouseClick (object sender, DataGridViewCellMouseEventArgs e) {
+            InstancesGrid.Columns[InstanceSortColumn].HeaderCell.SortGlyphDirection = SortOrder.None;
+            InstancesGrid.RowCount = 0;
+            if (InstanceSortColumn == e.ColumnIndex)
+                InstanceSortDirection = -InstanceSortDirection;
+            else
+                InstanceSortColumn = e.ColumnIndex;
+            InstancesGrid.Columns[InstanceSortColumn].HeaderCell.SortGlyphDirection = InstanceSortDirection > 0 ? SortOrder.Ascending : SortOrder.Descending;
+            RefreshInstances();
+        }
+
+        private void TypeFilter_TextChanged (object sender, EventArgs e) {
+            RefreshTypes();
+        }
+
+        private void countersToolStripMenuItem_Click (object sender, EventArgs e) {
+            var window = new CountersWindow(Snapshot);
+            window.Show();
         }
     }
 }

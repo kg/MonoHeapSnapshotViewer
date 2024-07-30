@@ -44,9 +44,17 @@ namespace MonoHeapSnapshotViewer {
             var data = new ReadOnlySpan<byte>(Data, (int)View.Capacity);
             int i = 0;
 
-            var counterChunk = new RiffChunk(data, ref i);
-            Assert(counterChunk.ChunkId.SequenceEqual("CNTR"u8));
-            LoadCounters(counterChunk);
+            // Load counters (there may be more than one chunk)
+            while (i < (View.Capacity - 8)) {
+                var chunk = new RiffChunk(data, ref i);
+                var chunkId = Encoding.UTF8.GetString(chunk.ChunkId);
+                switch (chunkId) {
+                    case "CNTR":
+                        LoadCounters(chunk);
+                        break;
+                }
+            }
+
             Classes = new SnapshotClass[(int)Counters["snapshot/num-classes"]];
             Objects = new SnapshotObject[(int)Counters["snapshot/num-objects"]];
             Roots = new SnapshotRoot[(int)Counters["snapshot/num-roots"]];
@@ -55,6 +63,7 @@ namespace MonoHeapSnapshotViewer {
             int classOffset = 0, objectOffset = 0, rootOffset = 0;
 
             // First decoding pass
+            i = 0;
             while (i < (View.Capacity - 8)) {
                 var chunk = new RiffChunk(data, ref i);
                 var chunkId = Encoding.UTF8.GetString(chunk.ChunkId);
@@ -148,7 +157,7 @@ namespace MonoHeapSnapshotViewer {
             for (int i = 0; i < Classes.Length; i++) {
                 ref var klass = ref Classes[i];
                 klass.Depth2HashSet = null;
-                klass.SubtreeHashSet = null;
+                klass.ReachableHashSet = null;
             }
         }
 
@@ -160,7 +169,7 @@ namespace MonoHeapSnapshotViewer {
             ref SnapshotClass klass, ref SnapshotObject obj, int depth
         ) {
             klass.Depth2HashSet ??= new ();
-            klass.SubtreeHashSet ??= new ();
+            klass.ReachableHashSet ??= new ();
             if (depth <= 1) {
                 if (!klass.Depth2HashSet.Contains(obj.Object)) {
                     klass.Depth2HashSet.Add(obj.Object);
@@ -168,9 +177,9 @@ namespace MonoHeapSnapshotViewer {
                 }
             }
 
-            if (!klass.SubtreeHashSet.Contains(obj.Object)) {
-                klass.SubtreeHashSet.Add(obj.Object);
-                klass.SubtreeSizeSum += obj.ShallowSize;
+            if (!klass.ReachableHashSet.Contains(obj.Object)) {
+                klass.ReachableHashSet.Add(obj.Object);
+                klass.ReachableSizeSum += obj.ShallowSize;
             }
 
             if (depth == 0)
@@ -185,7 +194,7 @@ namespace MonoHeapSnapshotViewer {
                 if (depth == 0)
                     obj.Depth2Size += refTarget.ShallowSize;
 
-                if (!klass.SubtreeHashSet.Contains(refTarget.Object))
+                if (!klass.ReachableHashSet.Contains(refTarget.Object))
                     UpdateSummaryDataForObjectRefs(ref klass, ref refTarget, depth + 1);
             }
         }
@@ -269,7 +278,6 @@ namespace MonoHeapSnapshotViewer {
         }
 
         internal void LoadCounters (RiffChunk chunk) {
-            Counters = new Dictionary<string, double>();
             var data = chunk.Data;
             while (data.Length > 0) {
                 var name = DecodePString(ref data);
@@ -363,9 +371,9 @@ namespace MonoHeapSnapshotViewer {
         public StringTableKey Kind, Namespace, Name;
         public ArraySegment<UInt32> GenericParameters;
 
-        public HashSet<UInt32>? Depth2HashSet, SubtreeHashSet;
+        public HashSet<UInt32>? Depth2HashSet, ReachableHashSet;
 
-        public uint Count, ShallowSizeSum, Depth2SizeSum, SubtreeSizeSum;
+        public uint Count, ShallowSizeSum, Depth2SizeSum, ReachableSizeSum;
 
         private string? _FullName;
 
@@ -405,11 +413,11 @@ namespace MonoHeapSnapshotViewer {
         public uint ShallowSize, RefCount, Depth2Size, DirectRootCount;
         public ArraySegment<UInt32> Refs;
 
-        private uint _SubtreeSize;
+        private uint _ReachableSize;
 
-        public uint GetSubtreeSize (Snapshot snapshot) {
-            if (_SubtreeSize > 0)
-                return _SubtreeSize;
+        public uint GetReachableSize (Snapshot snapshot) {
+            if (_ReachableSize > 0)
+                return _ReachableSize;
 
             if (Refs.Count <= 0)
                 return ShallowSize;
@@ -418,7 +426,7 @@ namespace MonoHeapSnapshotViewer {
             var result = ShallowSize;
             if (RefCount > 0)
                 AccumulateRefs(snapshot, set, Refs, ref result);
-            _SubtreeSize = result;
+            _ReachableSize = result;
             return result;
         }
 
